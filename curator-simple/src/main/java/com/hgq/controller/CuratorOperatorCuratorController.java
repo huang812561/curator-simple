@@ -4,9 +4,9 @@ import com.hgq.CuratorZkTemplate;
 import com.hgq.CuratorZkUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.curator.framework.api.CreateBuilder;
 import org.apache.curator.framework.api.transaction.CuratorOp;
 import org.apache.curator.framework.api.transaction.CuratorTransactionResult;
-import org.apache.curator.framework.recipes.cache.ChildData;
 import org.apache.curator.framework.recipes.cache.CuratorCacheListener;
 import org.apache.curator.framework.recipes.locks.InterProcessLock;
 import org.apache.zookeeper.CreateMode;
@@ -35,7 +35,24 @@ public class CuratorOperatorCuratorController {
     @Autowired
     private CuratorZkUtil curatorZkUtil;
 
-    String lockKey = "/curator-simple/aa";
+    String zkLockKey = "/curator-simple/aa";
+    String lockKey = "/curator-simple";
+
+    /**
+     * 先创建节点
+     * @return
+     */
+    @RequestMapping("createNode")
+    public String createZkNode(){
+        try {
+            curatorZkUtil.createNodeData(lockKey, "hello2");
+            return "success";
+        } catch (Exception e) {
+            log.error("创建node失败",e);
+        }
+        return "failure";
+
+    }
 
     /**
      * 测试锁
@@ -72,8 +89,8 @@ public class CuratorOperatorCuratorController {
      */
     @RequestMapping("hello2")
     public String hello2() {
-        String lockKey = "/curator-simple";
-        if (StringUtils.isNotBlank(curatorZkUtil.createNodeData(lockKey, "hello2"))) {
+        String path = "/curator-simple/test2";
+        if (StringUtils.isNotBlank(curatorZkUtil.createNodeData(path, "hello2"))) {
             System.out.println("create node success");
             return "success";
         } else {
@@ -89,17 +106,27 @@ public class CuratorOperatorCuratorController {
      */
     @RequestMapping("hello3")
     public String hello3() {
-        curatorZkUtil.orSetNodeData(lockKey, "hello hgq");
-        curatorZkUtil.setNodeData(lockKey, "value hello3");
-        if (null != curatorZkUtil.setNodeDataWithVersion(lockKey, "value hello3", 10)) {
+        String path = "/curator-simple/test3";
+        curatorZkUtil.orSetNodeData(path, "hello hgq");
+        curatorZkUtil.setNodeData(path, "value hello3");
+
+        Stat nodeStat = curatorZkUtil.getNodeStat(path);
+        int version = 0;
+        if(null != nodeStat){
+            version = nodeStat.getVersion();
+        }
+        /**
+         * 版本不正确则会抛出异常
+         * KeeperErrorCode = BadVersion for
+         */
+        if (null != curatorZkUtil.setNodeDataWithVersion(path, "hello3", version)) {
             System.out.println("update node data success");
             return "success";
         } else {
-            System.out.println("update node data failure");
+            System.out.println("update node data failure, create node");
+            curatorZkUtil.orSetNodeDataWithVersion(path, "hello hgq", version);
         }
-
-        curatorZkUtil.orSetNodeDataWithVersion(lockKey, "hello hgq", 100);
-        return "failure";
+        return "success";
 
     }
 
@@ -110,22 +137,27 @@ public class CuratorOperatorCuratorController {
      */
     @RequestMapping("hello4")
     public String hello4() {
-        curatorZkUtil.createNodeData(lockKey, "hello2");
-        curatorZkUtil.delNode(lockKey);
-        String returnNode = curatorZkUtil.createTempNodeDataWithProtection(lockKey, "hello4");
+        String path = "/curator-simple/test4";
+        curatorZkUtil.createNodeData(path, "hello2");
+        curatorZkUtil.delNode(path);
+        String returnNode = curatorZkUtil.createTempNodeDataWithProtection(path, "hello4");
         Stat stat = curatorZkUtil.getNodeStat(returnNode);
         if (null != stat) {
             curatorZkUtil.deleChildNode(returnNode);
         }
-        curatorZkUtil.createNodeData(lockKey, "hello2");
-        curatorZkUtil.deleChildNode(lockKey);
-        curatorZkUtil.createNodeData(lockKey, "hello2");
-        curatorZkUtil.delNodeWithVersion(lockKey, 10);
-        curatorZkUtil.createNodeData(lockKey, "hello2");
-        Stat stat2 = curatorZkUtil.getNodeStat(lockKey);
+
+        curatorZkUtil.createNodeData(path, "hello2");
+        curatorZkUtil.deleChildNode(path);
+        curatorZkUtil.createNodeData(path, "hello2");
+        int version = curatorZkUtil.getNodeStat(path).getVersion();
+        curatorZkUtil.delNodeWithVersion(path, version);
+        curatorZkUtil.createNodeData(path, "hello2");
+        Stat stat2 = curatorZkUtil.getNodeStat(path);
         if (null != stat2) {
-            curatorZkUtil.deleChildNodeWithVersion(lockKey, stat.getVersion());
+            curatorZkUtil.deleChildNodeWithVersion(path, stat.getVersion());
         }
+        String nodePath = curatorZkUtil.createNodeWithMode(path, CreateMode.PERSISTENT, "持久化节点");
+        curatorZkUtil.deleChildNode(nodePath);
         return "success";
     }
 
@@ -139,9 +171,9 @@ public class CuratorOperatorCuratorController {
         // 定义几个基本操作
         try {
             //单事务操作
-            CuratorOp createOp = curatorZkUtil.getTransaction().create().forPath(lockKey, "some data".getBytes());
-            CuratorOp setDataOp = curatorZkUtil.getTransaction().setData().forPath(lockKey, "other data".getBytes());
-            CuratorOp deleteOp = curatorZkUtil.getTransaction().delete().forPath(lockKey);
+            CuratorOp createOp = curatorZkUtil.getTransaction().create().forPath(zkLockKey, "some data".getBytes());
+            CuratorOp setDataOp = curatorZkUtil.getTransaction().setData().forPath(zkLockKey, "other data".getBytes());
+            CuratorOp deleteOp = curatorZkUtil.getTransaction().delete().forPath(zkLockKey);
 
             // 多事务处理，执行结果
             List<CuratorTransactionResult> results = curatorZkUtil.getMultiTransaction().forOperations(createOp, setDataOp, deleteOp);

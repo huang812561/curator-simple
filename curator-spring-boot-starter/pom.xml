@@ -118,7 +118,7 @@
         <repository>
             <id>ykc-realease</id>
             <name>hgq-respository-realsease</name>
-            <url>http://47.96.189.65:8081/nexus/content/repositories/ykc/</url>
+            <url>http://172.16.98.176:8081/nexus/content/repositories/ykc/</url>
         </repository>
     </distributionManagement>
 
